@@ -92,10 +92,9 @@ def LogStatus(connection, configFileId):
                 status_log, 
                 total_row_infile, 
                 created_at, 
-                updated_at, 
-                date_dim_id
+                updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         values = (
             configFileId, 
@@ -104,8 +103,7 @@ def LogStatus(connection, configFileId):
             "ER",  # Trạng thái mặc định
             totalRows, 
             currentTime, 
-            currentTime, 
-            None  # date_dim_id có thể để là None nếu không sử dụng
+            currentTime
         )
         cursor.execute(query, values)
         connection.commit()  # Đảm bảo dữ liệu được commit
@@ -121,7 +119,7 @@ def LogStatus(connection, configFileId):
 # ====================== Quy trình chính =======================
 filePath = r"D:\myStudySpace\hk7\datawarehouse\scriptETL\config.xml"
 scriptPath = r"C:\ProgramData\MySQL\MySQL Server 8.0\Uploads\crawDataInZingMp3.py"
-configId = 2
+configId = 1
 
 # 1. Đọc cấu hình từ XML
 config = ReadDatabaseConfig(filePath)
