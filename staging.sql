@@ -8,7 +8,7 @@ CREATE DATABASE IF NOT EXISTS db_staging;
 USE db_staging;
 
 -- Tạo bảng date_dim_without_quarter để lưu giá trị các mốc thời gian
-CREATE TABLE IF NOT EXISTS date_dim_without_quarter (
+CREATE TABLE IF NOT EXISTS date_dim (
     id INT PRIMARY KEY,
     dates DATE,
     index_id INT,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS top100_zing_daily (
     Artist TEXT,                        -- Tên nghệ sĩ hoặc ban nhạc
     TimeGet DATE,                       -- Thời gian lấy dữ liệu (năm-tháng-ngày)
     date_dim_id INT,
-    FOREIGN KEY (date_dim_id) REFERENCES date_dim_without_quarter (id) ON DELETE SET NULL
+    FOREIGN KEY (date_dim_id) REFERENCES date_dim (id) ON DELETE SET NULL
 );
 
 -- Tạo bảng top100_sportify_daily
@@ -48,5 +48,5 @@ CREATE TABLE IF NOT EXISTS top100_sportify_daily (
     Artist TEXT,                        -- Tên nghệ sĩ hoặc ban nhạc
     TimeGet DATE,                       -- Thời gian lấy dữ liệu (năm-tháng-ngày)
     date_dim_id INT,
-    FOREIGN KEY (date_dim_id) REFERENCES date_dim_without_quarter (id) ON DELETE SET NULL
+    FOREIGN KEY (date_dim_id) REFERENCES date_dim (id) ON DELETE SET NULL
 );
