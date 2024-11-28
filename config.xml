@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <database>
+    <ip>127.0.0.1</ip>
+    <port>3306</port>
+    <username>springstudent</username>
+    <password>springstudent</password>
+    <dbname>db_control</dbname>
+  </database>
+</configuration>
