@@ -22,10 +22,15 @@ CREATE TABLE IF NOT EXISTS log_file (
     file_name VARCHAR(255) COMMENT 'Tên của tệp được tải lên',
     file_size VARCHAR(255) COMMENT 'Kích thước của tệp tải lên (dạng chuỗi để dễ đọc, ví dụ: "10 MB")',
     status_log ENUM(
-        'ER',      
-        'PS',
-        'ES',
-        'TS'
+        'Extract_Start',      -- Khi bắt đầu thu thập dữ liệu
+        'Extract_Complete',   -- Khi thu thập dữ liệu hoàn thành
+        'Extract_Failed',     -- Khi thu thập dữ liệu bị lỗi
+        'Transform_Start',    -- Khi bắt đầu chuyển đổi dữ liệu
+        'Transform_Complete', -- Khi chuyển đổi dữ liệu hoàn thành
+        'Transform_Failed',   -- Khi chuyển đổi dữ liệu bị lỗi
+        'Load_Start',         -- Khi bắt đầu tải dữ liệu vào DW
+        'Load_Complete',      -- Khi tải dữ liệu vào DW hoàn thành
+        'Load_Failed'  		  -- Khi tải dữ liệu vào DW hoàn thành
     ) NOT NULL,
     total_row_infile BIGINT COMMENT 'Tổng số dòng dữ liệu đang có trong file',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Thời gian tạo bản ghi log',
@@ -47,7 +52,7 @@ VALUES (
     'https://zingmp3.vn/album/Top-100-Nhac-Rap-Viet-Nam-Hay-Nhat-HIEUTHUHAI-Rhyder-Bray-Double2T/ZWZB96AI.html', 
     'C:\\\\ProgramData\\\\MySQL\\\\MySQL Server 8.0\\\\Uploads\\\\', 
     'top100_zing_daily', 
-    'top100'
+    'top_song_fact'
 );
 INSERT INTO config_file (
     index_id, 
@@ -63,6 +68,6 @@ VALUES (
     'https://open.spotify.com/playlist/5ABHKGoOzxkaa28ttQV9sE', 
     'C:\\\\ProgramData\\\\MySQL\\\\MySQL Server 8.0\\\\Uploads\\\\', 
     'top100_sportify_daily', 
-    'top100'
+    'top_song_fact'
 );
 
