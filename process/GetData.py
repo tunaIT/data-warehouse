@@ -100,7 +100,7 @@ def LogStatus(connection, configFileId):
             configFileId, 
             fileName, 
             fileSize, 
-            "ER",  # Trạng thái mặc định
+            "Extract_Start",  # Trạng thái mặc định
             totalRows, 
             currentTime, 
             currentTime

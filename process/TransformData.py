@@ -52,7 +52,7 @@ def ConnectToDatabase(configDb):
         return None
 
 # Hàm truy vấn một dòng có trạng thái 'ER' trong bảng log_file.
-def QueryRowER(connection, configId):
+def QueryRowEC(connection, configId):
     try:
         # Tạo con trỏ truy vấn với dictionary=True để dữ liệu trả về dạng từ điển.
         cursor = connection.cursor(dictionary=True)
@@ -61,7 +61,7 @@ def QueryRowER(connection, configId):
         query = """
         SELECT *
         FROM log_file
-        WHERE status_log = 'Extract_Start' AND config_file_id = %s
+        WHERE (status_log = 'Extract_Complete' OR status_log = 'Transform_Start') AND config_file_id = %s
         LIMIT 1;
         """
         cursor.execute(query, (configId,))  # Truyền giá trị config_file_id vào câu truy vấn.
@@ -189,7 +189,99 @@ def AddValueDatedim(connection, row):
     except Error as e:
         # In lỗi nếu quá trình load dữ liệu thất bại.
         print(f"Lỗi khi thực thi transform date: {e}")
+def AddValueSongKey(connection, row):
+    try:
+        # Truy vấn thông tin cấu hình cho file cần load dữ liệu.
+        connection.database = 'db_control'
+        cursor = connection.cursor(dictionary=True)
+        query = """
+        SELECT dest_table_staging
+        FROM db_control.config_file
+        WHERE index_id = %s;
+        """
+        cursor.execute(query, (row['config_file_id'],))
+        dest_table_staging = cursor.fetchone()  # Lấy thông tin cấu hình.
 
+        if not dest_table_staging:
+            # Nếu không tìm thấy cấu hình, báo lỗi.
+            print(f"Không tìm thấy thông tin config_file cho config_file_id = {row['config_file_id']}")
+            cursor.close()
+            return
+
+        # Đảm bảo đóng con trỏ sau khi lấy thông tin config.
+        cursor.close()
+
+        # Bước 2: Truy vấn dữ liệu từ bảng dest_table_staging
+        connection.database = 'db_staging'
+        cursor = connection.cursor(dictionary=True)
+
+        # Truy vấn dữ liệu từ bảng staging lấy được từ config
+        select_query = f"""
+        SELECT * 
+        FROM {dest_table_staging['dest_table_staging']};
+        """
+        cursor.execute(select_query)
+        staging_row = cursor.fetchall()  # Lấy toàn bộ dữ liệu từ bảng staging.
+
+        # Bước 3: Truy vấn dữ liệu từ bảng song_dim
+        song_dim_query = """
+        SELECT SongKey, SongName, Artist
+        FROM song_dim;
+        """
+        cursor.execute(song_dim_query)
+        song_dim_row = cursor.fetchall()  # Lấy toàn bộ dữ liệu từ bảng song_dim.
+
+        # Lặp qua từng dòng trong staging_row
+        for staging in staging_row:
+            song_name = staging['SongName']
+            artist = staging['Artist']
+            song_key = None  # Biến để lưu SongKey
+
+            # Kiểm tra sự tồn tại của SongName và Artist trong song_dim_row
+            song_dim_match = next((song for song in song_dim_row if song['SongName'] == song_name and song['Artist'] == artist), None)
+
+            if song_dim_match:
+                # Nếu có, lấy SongKey
+                song_key = song_dim_match['SongKey']
+                # Cập nhật top100_zing_daily với SongKey
+                update_query = """
+                UPDATE top100_zing_daily
+                SET SongKey = %s
+                WHERE SongName = %s AND Artist = %s;
+                """
+                cursor.execute(update_query, (song_key, song_name, artist))
+            else:
+                # Nếu không có, insert vào song_dim và lấy SongKey mới
+                insert_query = """
+                INSERT INTO song_dim (SongName, Artist)
+                VALUES (%s, %s);
+                """
+                cursor.execute(insert_query, (song_name, artist))
+                connection.commit()  # commit để có SongKey mới
+
+                # Lấy SongKey mới từ song_dim
+                cursor.execute("""
+                SELECT SongKey
+                FROM song_dim
+                WHERE SongName = %s AND Artist = %s;
+                """, (song_name, artist))
+                new_song_dim_row = cursor.fetchone()
+                song_key = new_song_dim_row['SongKey']
+
+                # Cập nhật top100_zing_daily với SongKey mới
+                update_query = """
+                UPDATE top100_zing_daily
+                SET SongKey = %s
+                WHERE SongName = %s AND Artist = %s;
+                """
+                cursor.execute(update_query, (song_key, song_name, artist))
+
+        # Commit tất cả các thay đổi sau khi xử lý xong
+        connection.commit()
+        cursor.close()
+
+    except Error as e:
+        print(f"Lỗi khi thực thi transform data: {e}")
 
 # Code - Work flow
 # 1. Load init config.xml, configId = 1 (source: zingmp3)
@@ -201,12 +293,17 @@ if config:
     # 2. Kết nối db_control
     connection = ConnectToDatabase(config)
     if connection:
-        # 3. Query db_control.file_log 1 dòng với status = Extract_Start , config_id = 1
-        row = QueryRowER(connection, configId)
+        # 3. Query db_control.file_log 1 dòng với status = Extract_Complete , config_id = 1
+        row = QueryRowEC(connection, configId)
         if row:
-            # 5. Đọc dữ liệu từ file vào db_staging.top100_zing_daily
-            LoadDataIntoStaging(connection, row)
-            # 6. cập nhật status = Extract_Complete
-            SetStatus(connection, row, "Extract_Complete")
+            #  cập nhật status = Extract_Complete
+            SetStatus(connection, row, "Transform_Start")
+            # chuyển đổi date to date_id
+            AddValueDatedim(connection, row)
+            # chuyển đổi song thành song_key
+            AddValueSongKey(connection, row)
+            # cập nhật status = Transform_Complete
+            SetStatus(connection, row, "Transform_Complete")
+
         # Đảm bảo đóng kết nối sau khi hoàn thành công việc
         connection.close()
