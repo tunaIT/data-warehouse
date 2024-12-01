@@ -85,6 +85,7 @@ def LogStatus(connection, configFileId):
         cursor = connection.cursor()
         currentTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         query = """
+            SET SQL_SAFE_UPDATES = 0;
             INSERT INTO log_file (
                 config_file_id, 
                 file_name, 
