@@ -31,6 +31,8 @@ CREATE TABLE top_song_fact (
     ID INT PRIMARY KEY AUTO_INCREMENT,  -- ID duy nhất cho mỗi hàng dữ liệu (SK)
     SongKey INT,                        -- Tham chiếu đến khóa chính của dim_song (NK)
     Top INT,                            -- Thứ hạng của bài hát trong top 100
+	Artist TEXT NOT NULL ,              -- Tên nghệ sĩ hoặc ban nhạc
+	SongName TEXT NOT NULL,             -- Tên bài hát
     TimeGet DATE,                       -- Thời gian lấy dữ liệu (năm-tháng-ngày)
     date_dim_id INT,                    -- Tham chiếu đến bảng date_dim
     date_expired DATE,                  -- Ngày bài hát hết hạn trong bảng xếp hạng
