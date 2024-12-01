@@ -1,0 +1,1 @@
+run getData : python GetData.py "D:\\myStudySpace\\hk7\\datawarehouse\\scriptETL\\config.xml" 1
