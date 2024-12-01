@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS log_file (
         'Extract_Start',      -- Khi bắt đầu thu thập dữ liệu
         'Extract_Complete',   -- Khi thu thập dữ liệu hoàn thành
         'Extract_Failed',     -- Khi thu thập dữ liệu bị lỗi
+        'Extract_Staging_Start',
+        'Extract_Staging_Success',
+        'Extract_Staging_Failed',
         'Transform_Start',    -- Khi bắt đầu chuyển đổi dữ liệu
         'Transform_Complete', -- Khi chuyển đổi dữ liệu hoàn thành
         'Transform_Failed',   -- Khi chuyển đổi dữ liệu bị lỗi
