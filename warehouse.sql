@@ -30,8 +30,8 @@ DROP TABLE IF EXISTS dim_song;
 -- tạo bảng dim_song (thông tin bài hát)
 CREATE TABLE IF NOT EXISTS dim_song (
     song_id INT PRIMARY KEY AUTO_INCREMENT,  -- Khóa chính
-    song_name VARCHAR(255) NOT NULL,         -- Tên bài hát
-    artist_name VARCHAR(255) NOT NULL       -- Tên nghệ sĩ hoặc ban nhạc
+    song_name VARCHAR(255) NULL,         -- Tên bài hát
+    artist_name VARCHAR(255) NULL       -- Tên nghệ sĩ hoặc ban nhạc
 );
 
 -- Xóa bảng top_song_fact nếu đã tồn tại
@@ -39,20 +39,15 @@ DROP TABLE IF EXISTS top_song_fact;
 -- Tạo bảng top_song_fact (thứ hạng bài hát)
 CREATE TABLE top_song_fact (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    song_key INT NOT NULL,                     -- Tham chiếu đến dim_song
+    song_key INT NULL,                     -- Tham chiếu đến dim_song
     top INT,                                   -- Thứ hạng của bài hát
-    time_get DATE NOT NULL,                    -- Ngày lấy dữ liệu
+    time_get DATE NULL,                    -- Ngày lấy dữ liệu
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    date_dim_id INT NOT NULL,                  -- Tham chiếu đến dim_date
+    date_dim_id INT NULL,                  -- Tham chiếu đến dim_date
     date_expired DATE,                         -- Ngày bài hát rời bảng xếp hạng
     source VARCHAR(255),                       -- Nguồn dữ liệu (Spotify, Zing...)
     FOREIGN KEY (song_key) REFERENCES dim_song(song_id) ON DELETE SET NULL,
     FOREIGN KEY (date_dim_id) REFERENCES date_dim(id) ON DELETE SET NULL
 );
-ALTER TABLE top_song_fact
-ADD COLUMN config_file_id INT COMMENT 'Tham chiếu tới bảng config_file trong DB Control',
-ADD COLUMN log_file_id INT COMMENT 'Tham chiếu tới bảng log_file trong DB Control',
-ADD FOREIGN KEY (config_file_id) REFERENCES db_control.config_file(index_id) ON DELETE SET NULL,
-ADD FOREIGN KEY (log_file_id) REFERENCES db_control.log_file(index_id) ON DELETE SET NULL;
 
 

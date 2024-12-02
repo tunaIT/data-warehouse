@@ -28,7 +28,13 @@ def ReadDatabaseConfig(filePath):
 # Hàm kết nối đến cơ sở dữ liệu.
 def ConnectToDatabase(configDb):
     try:
-        connection = mysql.connector.connect(**configDb)
+        connection = mysql.connector.connect(
+            host=configDb['host'],
+            port=configDb['port'],
+            user=configDb['user'],
+            password=configDb['password'],
+            database=configDb['database']
+        )
         if connection.is_connected():
             print("Kết nối thành công tới database!")
             return connection
@@ -67,14 +73,18 @@ def UpdateStatus(connection, table, indexId, status):
 
 
 # Hàm gọi stored procedure LoadDataFromStagingToDW.
+# sửa lại 
 def CallLoadDataProcedure(connection):
     try:
+        print(connection.database)
         cursor = connection.cursor()
         cursor.callproc('LoadDataFromStagingToDW')  # Gọi stored procedure
         connection.commit()
         print("Stored procedure 'LoadDataFromStagingToDW' đã được thực thi thành công.")
+        return True
     except Error as e:
         print(f"Lỗi khi gọi stored procedure: {e}")
+        return e
     finally:
         cursor.close()
 
@@ -90,21 +100,25 @@ def Main(filePath, configId):
             row = ExecuteQuery(connection, """
             SELECT *
             FROM db_control.log_file
-            WHERE status_log = 'Extract_Start' AND config_file_id = %s
+            WHERE ( status_log = 'Transform_Complete' OR status_log = 'Load_Failed')  AND config_file_id = %s
             LIMIT 1;
             """, (configId,), fetchOne=True)
+            print("hihi")
 
-            # Nếu tìm thấy dòng có trạng thái 'Extract_Start', gọi stored procedure.
+            # Nếu tìm thấy dòng có trạng thái 'Transform_Complete', gọi stored procedure.
             if row:
-                # Cập nhật trạng thái 'Extract_Complete' trước khi bắt đầu ETL.
-                UpdateStatus(connection, "db_control.log_file", row['index_id'], "Extract_Complete")
+                
+                # Cập nhật trạng thái 'Load_Start' trước khi bắt đầu ETL.
+                UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Start")
                 
                 # Gọi stored procedure để thực hiện ETL từ Staging vào DW.
-                CallLoadDataProcedure(connection)
-
+                rs = CallLoadDataProcedure(connection)
+                if rs == True:
                 # Cập nhật trạng thái sau khi thực hiện xong ETL
-                UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Complete")
-                
+                    UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Complete")
+                else:
+                    UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Failed")
+
             connection.close()
 
 

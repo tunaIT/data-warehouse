@@ -161,7 +161,7 @@ def main(filePath, configId):
                     row = ExecuteQuery(connection, """
                     SELECT *
                     FROM log_file
-                    WHERE status_log = 'Extract_Complete' AND config_file_id = %s
+                    WHERE (status_log = 'Extract_Complete' OR status_log = 'Extract_Staging_Failed') AND config_file_id = %s
                     LIMIT 1;
                     """, (configId,), fetchOne=True)
                     # 5. Kiểm tra kết quả truy vấn thành công ?
