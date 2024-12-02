@@ -28,25 +28,17 @@ CREATE TABLE IF NOT EXISTS date_dim (
     holiday_status VARCHAR(255),
     weekday_or_weekend VARCHAR(255)
 );
--- Tạo bảng dim_song tối giản để lưu thông tin bài hát
-CREATE TABLE IF NOT EXISTS song_dim (
-    SongKey INT PRIMARY KEY AUTO_INCREMENT,  -- Khóa chính tự động tăng
-    SongName TEXT NULL,                  -- Tên bài hát
-    Artist TEXT NULL                     -- Tên nghệ sĩ hoặc ban nhạc
-);
 -- Xóa bảng top100_zing_daily nếu đã tồn tại
 DROP TABLE IF EXISTS top100_zing_daily;
 
 -- Tạo lại bảng top100_zing_daily
 CREATE TABLE top100_zing_daily (
     ID INT PRIMARY KEY AUTO_INCREMENT,  -- ID duy nhất cho mỗi hàng dữ liệu
-    SongKey INT,                        -- Tham chiếu đến khóa chính của dim_song
     Top INT,                            -- Thứ hạng của bài hát trong top 100
 	Artist TEXT NOT NULL ,                    -- Tên nghệ sĩ hoặc ban nhạc
 	SongName TEXT NOT NULL,                  -- Tên bài hát
     TimeGet DATE,                       -- Thời gian lấy dữ liệu (năm-tháng-ngày)
     date_dim_id INT,                    -- Tham chiếu đến bảng date_dim
-    FOREIGN KEY (SongKey) REFERENCES song_dim (SongKey) ON DELETE SET NULL,
     FOREIGN KEY (date_dim_id) REFERENCES date_dim (id) ON DELETE SET NULL
 );
 
@@ -56,12 +48,10 @@ DROP TABLE IF EXISTS top100_sportify_daily;
 -- Tạo lại bảng top100_sportify_daily
 CREATE TABLE top100_sportify_daily (
     ID INT PRIMARY KEY AUTO_INCREMENT,  -- ID duy nhất cho mỗi hàng dữ liệu
-    SongKey INT,                        -- Tham chiếu đến khóa chính của dim_song
     Top INT,                            -- Thứ hạng của bài hát trong top 100
 	Artist TEXT NOT NULL ,                    -- Tên nghệ sĩ hoặc ban nhạc
 	SongName TEXT NOT NULL,                  -- Tên bài hát
     TimeGet DATE,                       -- Thời gian lấy dữ liệu (năm-tháng-ngày)
     date_dim_id INT,                    -- Tham chiếu đến bảng date_dim
-    FOREIGN KEY (SongKey) REFERENCES song_dim (SongKey) ON DELETE SET NULL,
     FOREIGN KEY (date_dim_id) REFERENCES date_dim (id) ON DELETE SET NULL
 );

@@ -273,16 +273,16 @@ def main(filePath, configId):
                         # 8. Kiểm tra việc chuyển đổi thành công không ?
                         if errAddDimId == True:
                             # 9. chuyển đổi song thành song_key
-                            errAddSongKey = AddValueSongKey(connection, row)
+                            # errAddSongKey = AddValueSongKey(connection, row)
                             # 10. Kiểm tra việc chuyển đổi thành công không ?
-                            if errAddSongKey == True:
+                            # if errAddSongKey == True:
                             # 11. cập nhật status = Transform_Complete
                                 SetStatus(connection, row,"Transform_Complete")
                                 break
-                            else:
-                                # 10.1. cập nhật status = Transform_Failed
-                                SetStatus(connection, row,"Transform_Failed")
-                                break
+                            # else:
+                            #     # 10.1. cập nhật status = Transform_Failed
+                            #     SetStatus(connection, row,"Transform_Failed")
+                            #     break
                         else:
                             # 8.1. cập nhật status = Transform_Failed
                             SetStatus(connection, row,"Transform_Failed")
