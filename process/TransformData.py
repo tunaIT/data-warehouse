@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET  # Thư viện xử lý file XML.
 import mysql.connector  # Thư viện để kết nối và thao tác với MySQL.
 from mysql.connector import Error  # Class xử lý lỗi của mysql.connector.
-import datetime  # Thư viện hỗ trợ làm việc với ngày giờ.
+from datetime import datetime  # Thư viện hỗ trợ làm việc với ngày giờ.
 
 # Hàm đọc cấu hình từ file XML.
 def ReadDatabaseConfig(filePath):
@@ -61,7 +61,7 @@ def QueryRowEC(connection, configId):
         query = """
         SELECT *
         FROM log_file
-        WHERE (status_log = 'Extract_Complete' OR status_log = 'Transform_Start') AND config_file_id = %s
+        WHERE (status_log = 'Extract_Staging_Success' OR status_log = 'Transform_Start' OR status_log = 'Transform_Failed') AND config_file_id = %s
         LIMIT 1;
         """
         cursor.execute(query, (configId,))  # Truyền giá trị config_file_id vào câu truy vấn.
@@ -88,7 +88,7 @@ def SetStatus(connection, row, status):
         WHERE index_id = %s;
         """
         # Lấy thời gian hiện tại để cập nhật.
-        updated_at = datetime.datetime.now()
+        updated_at = datetime.now()
         cursor.execute(query, (status, updated_at, row['index_id']))
         connection.commit()  # Lưu thay đổi vào database.
 
@@ -97,56 +97,6 @@ def SetStatus(connection, row, status):
     except Error as e:
         # In lỗi nếu xảy ra lỗi cập nhật.
         print(f"Lỗi khi cập nhật trạng thái: {e}")
-
-# Hàm load dữ liệu từ file CSV vào bảng staging.
-def LoadDataIntoStaging(connection, row):
-    try:
-        print(f"connection = {connection.database}")
-        # Truy vấn thông tin cấu hình cho file cần load dữ liệu.
-        cursor = connection.cursor(dictionary=True)
-        query = """
-        SELECT source_folder_location, dest_table_staging
-        FROM db_control.config_file
-        WHERE index_id = %s;
-        """
-        cursor.execute(query, (row['config_file_id'],))
-        config_row = cursor.fetchone()  # Lấy thông tin cấu hình.
-
-        if not config_row:
-            # Nếu không tìm thấy cấu hình, báo lỗi.
-            print(f"Không tìm thấy thông tin config_file cho config_file_id = {row['config_file_id']}")
-            return
-        
-        # Tạo đường dẫn đầy đủ của file CSV.
-        file_path = config_row['source_folder_location'] + row['file_name']
-        print(file_path)
-        dest_table = config_row['dest_table_staging']
-        print(dest_table)
-        # Chuyển database hiện tại thành db_staging để load dữ liệu.
-        connection.database = 'db_staging'
-
-        # Tạo câu lệnh LOAD DATA INFILE để nạp dữ liệu từ file CSV.
-        load_data_query = f"""
-        LOAD DATA INFILE '{file_path}'
-        INTO TABLE {dest_table}
-        FIELDS TERMINATED BY ',' 
-        ENCLOSED BY '"' 
-        LINES TERMINATED BY '\\n' 
-        IGNORE 1 LINES
-        (Top, Artist, @SongName, @TimeGet)
-        SET 
-            SongName = TRIM(BOTH '''' FROM SUBSTRING_INDEX(SUBSTRING_INDEX(@SongName, ',', 1), '[', -1)),
-            TimeGet = STR_TO_DATE(@TimeGet, '%Y/%m/%d');
-        """
-        
-        cursor.execute(load_data_query)  # Thực thi lệnh LOAD DATA INFILE.
-        connection.commit()  # Lưu thay đổi vào database.
-        print(f"Dữ liệu đã được load vào bảng {dest_table} từ file {file_path}")
-
-        cursor.close()
-    except Error as e:
-        # In lỗi nếu quá trình load dữ liệu thất bại.
-        print(f"Lỗi khi thực thi LOAD DATA INFILE: {e}")
 def AddValueDatedim(connection, row):
     try:
         # Truy vấn thông tin cấu hình cho file cần load dữ liệu.
@@ -182,13 +132,13 @@ def AddValueDatedim(connection, row):
         
         cursor.execute(update_query)  # Thực thi câu lệnh UPDATE.
         connection.commit()  # Lưu thay đổi vào database.
-        print(f"Transform thành công cho bảng: {config_row['dest_table_staging']}")
+        print(f"Transform date thành công cho bảng: {config_row['dest_table_staging']}")
         
         cursor.close()  # Đảm bảo đóng con trỏ.
-    
+        return True
     except Error as e:
         # In lỗi nếu quá trình load dữ liệu thất bại.
-        print(f"Lỗi khi thực thi transform date: {e}")
+        return e
 def AddValueSongKey(connection, row):
     try:
         # Truy vấn thông tin cấu hình cho file cần load dữ liệu.
@@ -279,31 +229,88 @@ def AddValueSongKey(connection, row):
         # Commit tất cả các thay đổi sau khi xử lý xong
         connection.commit()
         cursor.close()
+        return True
 
     except Error as e:
-        print(f"Lỗi khi thực thi transform data: {e}")
+        return e
+def WriteErrorLog(errorMessage, filePath):
+    try:
+        with open(filePath, "a", encoding="utf-8") as errorFile:
+            currentTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            errorFile.write(f"[{currentTime}] {errorMessage}\n")
+        print(f"Lỗi đã được ghi vào file: {filePath}")
+    except Exception as e:
+        print(f"Lỗi khi ghi lỗi vào file: {e}")
+import argparse
 
-# Code - Work flow
-# 1. Load init config.xml, configId = 1 (source: zingmp3)
-filePath = r"D:\myStudySpace\hk7\datawarehouse\scriptETL\config.xml"
-configId = 1
-
-config = ReadDatabaseConfig(filePath)
-if config:
-    # 2. Kết nối db_control
-    connection = ConnectToDatabase(config)
-    if connection:
-        # 3. Query db_control.file_log 1 dòng với status = Extract_Complete , config_id = 1
-        row = QueryRowEC(connection, configId)
-        if row:
-            #  cập nhật status = Extract_Complete
-            SetStatus(connection, row, "Transform_Start")
-            # chuyển đổi date to date_id
-            AddValueDatedim(connection, row)
-            # chuyển đổi song thành song_key
-            AddValueSongKey(connection, row)
-            # cập nhật status = Transform_Complete
-            SetStatus(connection, row, "Transform_Complete")
-
-        # Đảm bảo đóng kết nối sau khi hoàn thành công việc
-        connection.close()
+def main(filePath, configId):
+    retryCount = 0  # Đếm số lần thử
+    while retryCount < 5:
+        try:
+            # 1. Đọc file config.xml ( db control info ) để lấy cấu hình
+            config = ReadDatabaseConfig(filePath)
+            if not config:
+                raise ValueError("Cấu hình database không hợp lệ hoặc bị lỗi.")
+            # 2. Kết nối db_control
+            # 3. Kiểm tra kết nối cơ sở dữ liệu?
+            try:
+                connection = mysql.connector.connect(
+                    host=config['host'],
+                    port=config['port'],
+                    user=config['user'],
+                    password=config['password'],
+                    database=config['database']
+                )
+                if connection.is_connected():
+                     # 4. Query db_control.file_log 1 dòng với status = Extract_Staging_Successe , config_id = 1
+                    row = QueryRowEC(connection, configId)
+                    # 5. Kiểm tra kết quả truy vấn thành công ?
+                    if row:
+                      #  6. cập nhật status = Transform_Start
+                        SetStatus(connection, row, "Transform_Start")
+                       # 7. chuyển đổi date to date_id
+                        errAddDimId = AddValueDatedim(connection, row)
+                        # 8. Kiểm tra việc chuyển đổi thành công không ?
+                        if errAddDimId == True:
+                            # 9. chuyển đổi song thành song_key
+                            errAddSongKey = AddValueSongKey(connection, row)
+                            # 10. Kiểm tra việc chuyển đổi thành công không ?
+                            if errAddSongKey == True:
+                            # 11. cập nhật status = Transform_Complete
+                                SetStatus(connection, row,"Transform_Complete")
+                                break
+                            else:
+                                # 10.1. cập nhật status = Transform_Failed
+                                SetStatus(connection, row,"Transform_Failed")
+                                break
+                        else:
+                            # 8.1. cập nhật status = Transform_Failed
+                            SetStatus(connection, row,"Transform_Failed")
+                            break
+                    else:
+                        connection.close()
+                        break
+            except Exception as e:
+                # Ghi lỗi vào file D:\\error_CONNECT_DB
+                WriteErrorLog(str(e), "D:\\error_CONNECT_DB.txt")
+                # 3.1. Kiểm tra số lần lặp có hơn 5 lần không ? 
+                retryCount += 1
+                if retryCount > 5:
+                    SetStatus(connection, row,"Transform_Failed")
+                    print(f"Thử lại lần thứ {retryCount}...")
+                    break
+        finally:
+            if 'connection' in locals() and connection.is_connected():
+                connection.close()
+                print("Đã đóng kết nối database.")
+if __name__ == "__main__":
+    # Khởi tạo trình phân tích tham số
+    parser = argparse.ArgumentParser(description="Script xử lý dữ liệu với tham số từ file config và configId.")
+    parser.add_argument("filePath", type=str, help="Đường dẫn tới file cấu hình (config.xml).")
+    parser.add_argument("configId", type=int, help="ID cấu hình trong database.")
+    
+    # Phân tích tham số
+    args = parser.parse_args()
+    
+    # Gọi hàm main với các tham số
+    main(args.filePath, args.configId)
