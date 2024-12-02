@@ -3,6 +3,7 @@ DROP DATABASE IF EXISTS db_dw;
 
 CREATE DATABASE IF NOT EXISTS db_dw; 
 USE db_dw;
+
 -- Tạo bảng date_dim_without_quarter để lưu giá trị các mốc thời gian
 CREATE TABLE IF NOT EXISTS date_dim (
     id INT PRIMARY KEY,
@@ -24,18 +25,34 @@ CREATE TABLE IF NOT EXISTS date_dim (
     holiday_status VARCHAR(255),
     weekday_or_weekend VARCHAR(255)
 );
--- Xóa bảng top_song nếu đã tồn tại
-DROP TABLE IF EXISTS top_song;
--- Tạo bảng top_song
-CREATE TABLE top_song_fact (
-    ID INT PRIMARY KEY AUTO_INCREMENT,  -- ID duy nhất cho mỗi hàng dữ liệu (SK)
-    SongKey INT,                        -- Tham chiếu đến khóa chính của dim_song (NK)
-    Top INT,                            -- Thứ hạng của bài hát trong top 100
-	Artist TEXT NOT NULL ,              -- Tên nghệ sĩ hoặc ban nhạc
-	SongName TEXT NOT NULL,             -- Tên bài hát
-    TimeGet DATE,                       -- Thời gian lấy dữ liệu (năm-tháng-ngày)
-    date_dim_id INT,                    -- Tham chiếu đến bảng date_dim
-    date_expired DATE,                  -- Ngày bài hát hết hạn trong bảng xếp hạng
-    FOREIGN KEY (date_dim_id) REFERENCES date_dim (id) ON DELETE SET NULL
+-- Xóa bảng dim_song nếu đã tồn tại
+DROP TABLE IF EXISTS dim_song;
+-- tạo bảng dim_song (thông tin bài hát)
+CREATE TABLE IF NOT EXISTS dim_song (
+    song_id INT PRIMARY KEY AUTO_INCREMENT,  -- Khóa chính
+    song_name VARCHAR(255) NOT NULL,         -- Tên bài hát
+    artist_name VARCHAR(255) NOT NULL       -- Tên nghệ sĩ hoặc ban nhạc
 );
+
+-- Xóa bảng top_song_fact nếu đã tồn tại
+DROP TABLE IF EXISTS top_song_fact;
+-- Tạo bảng top_song_fact (thứ hạng bài hát)
+CREATE TABLE top_song_fact (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    song_key INT NOT NULL,                     -- Tham chiếu đến dim_song
+    top INT,                                   -- Thứ hạng của bài hát
+    time_get DATE NOT NULL,                    -- Ngày lấy dữ liệu
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    date_dim_id INT NOT NULL,                  -- Tham chiếu đến dim_date
+    date_expired DATE,                         -- Ngày bài hát rời bảng xếp hạng
+    source VARCHAR(255),                       -- Nguồn dữ liệu (Spotify, Zing...)
+    FOREIGN KEY (song_key) REFERENCES dim_song(song_id) ON DELETE SET NULL,
+    FOREIGN KEY (date_dim_id) REFERENCES date_dim(id) ON DELETE SET NULL
+);
+ALTER TABLE top_song_fact
+ADD COLUMN config_file_id INT COMMENT 'Tham chiếu tới bảng config_file trong DB Control',
+ADD COLUMN log_file_id INT COMMENT 'Tham chiếu tới bảng log_file trong DB Control',
+ADD FOREIGN KEY (config_file_id) REFERENCES db_control.config_file(index_id) ON DELETE SET NULL,
+ADD FOREIGN KEY (log_file_id) REFERENCES db_control.log_file(index_id) ON DELETE SET NULL;
+
 
