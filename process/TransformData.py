@@ -272,17 +272,8 @@ def main(filePath, configId):
                         errAddDimId = AddValueDatedim(connection, row)
                         # 8. Kiểm tra việc chuyển đổi thành công không ?
                         if errAddDimId == True:
-                            # 9. chuyển đổi song thành song_key
-                            # errAddSongKey = AddValueSongKey(connection, row)
-                            # 10. Kiểm tra việc chuyển đổi thành công không ?
-                            # if errAddSongKey == True:
-                            # 11. cập nhật status = Transform_Complete
                                 SetStatus(connection, row,"Transform_Complete")
                                 break
-                            # else:
-                            #     # 10.1. cập nhật status = Transform_Failed
-                            #     SetStatus(connection, row,"Transform_Failed")
-                            #     break
                         else:
                             # 8.1. cập nhật status = Transform_Failed
                             SetStatus(connection, row,"Transform_Failed")
@@ -307,10 +298,15 @@ if __name__ == "__main__":
     # Khởi tạo trình phân tích tham số
     parser = argparse.ArgumentParser(description="Script xử lý dữ liệu với tham số từ file config và configId.")
     parser.add_argument("filePath", type=str, help="Đường dẫn tới file cấu hình (config.xml).")
-    parser.add_argument("configId", type=int, help="ID cấu hình trong database.")
+    parser.add_argument("configId", type=int, nargs="?", default=None, help="ID cấu hình trong database (mặc định là [1, 2]).")
     
     # Phân tích tham số
     args = parser.parse_args()
     
-    # Gọi hàm main với các tham số
-    main(args.filePath, args.configId)
+    # Nếu không có configId, gán mặc định là danh sách [1, 2]
+    configIds = [args.configId] if args.configId else [1, 2]
+    
+    for configId in configIds:
+        print(f"Đang xử lý với configId = {configId}...")
+        # Gọi hàm main với từng configId
+        main(args.filePath, configId)
