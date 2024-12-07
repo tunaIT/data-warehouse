@@ -1,8 +1,8 @@
 import xml.etree.ElementTree as ET  # Thư viện xử lý file XML.
 import mysql.connector  # Thư viện để kết nối và thao tác với MySQL.
 from mysql.connector import Error  # Class xử lý lỗi của mysql.connector.
-import datetime  # Thư viện hỗ trợ làm việc với ngày giờ.
-
+from datetime import datetime  # Sửa đổi import để dùng trực tiếp datetime.now().
+import argparse
 
 # Hàm đọc cấu hình từ file XML.
 def ReadDatabaseConfig(filePath):
@@ -24,7 +24,6 @@ def ReadDatabaseConfig(filePath):
         print(f"Lỗi khi đọc file XML: {e}")
         return None
 
-
 # Hàm kết nối đến cơ sở dữ liệu.
 def ConnectToDatabase(configDb):
     try:
@@ -35,7 +34,6 @@ def ConnectToDatabase(configDb):
     except Error as e:
         print(f"Lỗi khi kết nối tới database: {e}")
         return None
-
 
 # Hàm thực thi câu truy vấn SQL.
 def ExecuteQuery(connection, query, params=None, fetchOne=False):
@@ -49,7 +47,6 @@ def ExecuteQuery(connection, query, params=None, fetchOne=False):
     finally:
         cursor.close()
 
-
 # Hàm cập nhật trạng thái và thời gian của một dòng.
 def UpdateStatus(connection, table, indexId, status):
     try:
@@ -58,19 +55,18 @@ def UpdateStatus(connection, table, indexId, status):
         SET status_log = %s, updated_at = %s
         WHERE index_id = %s;
         """
-        updatedAt = datetime.datetime.now()
+        updatedAt = datetime.now()
         ExecuteQuery(connection, query, (status, updatedAt, indexId))
         connection.commit()
         print(f"Cập nhật trạng thái '{status}' cho index_id = {indexId}.")
     except Error as e:
         print(f"Lỗi khi cập nhật trạng thái: {e}")
 
-
-# Hàm load dữ liệu từ Staging vào Data Warehouse.
+# Hàm load dữ liệu từ file CSV.
 def LoadDataIntoDW(connection, row):
     try:
         query = """
-        SELECT source_folder_location, dest_table_staging
+        SELECT dest_table_staging
         FROM db_control.config_file
         WHERE index_id = %s;
         """
@@ -79,36 +75,84 @@ def LoadDataIntoDW(connection, row):
             print(f"Không tìm thấy cấu hình cho config_file_id = {row['config_file_id']}")
             return
         
-        # Dữ liệu load từ Staging vào Data Warehouse
         sourceTable = configRow['dest_table_staging']
+        connection.database = 'db_staging'
         connection.database = 'db_dw'
 
-        loadDataQuery = f"""
-        INSERT INTO db_dw.top_song_fact (song_key, top, artist_name, song_name, time_get, date_dim_id, date_expired)
-        SELECT A.SongKey, A.Top, A.Artist, A.SongName, A.TimeGet, A.date_dim_id, '9999-12-31'
-        FROM db_staging.{sourceTable} A
-        LEFT JOIN db_dw.top_song_fact B ON A.SongKey = B.SongKey
-        WHERE A.Top != B.Top AND B.date_expired = '9999-12-31';
+        #load dữ liệu từ staging qua data warehouse
+        loadDataDimSongQuery = f"""
+        INSERT INTO dim_song (song_name, Artist)
+        SELECT DISTINCT t.SongName, t.Artist
+        FROM db_staging.{sourceTable} t
+        WHERE NOT EXISTS (
+            SELECT 1 FROM dim_song d
+            WHERE d.song_name = t.SongName AND d.Artist = t.Artist
+        );
         """
-        ExecuteQuery(connection, loadDataQuery)
+        ExecuteQuery(connection, loadDataDimSongQuery)
+        print(f"Dữ liệu đã được chèn vào bảng dim_song từ bảng {sourceTable}.")
+        loadDataTopSongFactQuery = f"""
+        INSERT INTO top_song_fact (song_key, top, time_get, date_dim_id)
+        SELECT
+            d.song_id,
+            t.Top,
+            t.TimeGet,
+            t.date_dim_id
+        FROM db_staging.{sourceTable} t
+        INNER JOIN dim_song d
+            ON d.song_name = t.SongName AND d.Artist = t.Artist
+        WHERE NOT EXISTS (
+            SELECT 1 FROM top_song_fact dw
+            WHERE dw.time_get = t.TimeGet AND dw.song_key = d.song_id
+        );
+        """
+        ExecuteQuery(connection, loadDataTopSongFactQuery)
         connection.commit()
-        print(f"Dữ liệu đã được load từ Staging vào Data Warehouse.")
+        print(f"Dữ liệu đã được load vào bảng top_song_fact từ bảng {sourceTable}.")
+        
+        # Xóa dữ liệu trong bảng staging 
+        deleteQuery = f"DELETE FROM db_staging.{sourceTable};"
+        ExecuteQuery(connection, deleteQuery)
+        connection.commit()
+        print(f"Dữ liệu đã được xóa khỏi bảng {sourceTable}.")
     except Error as e:
-        print(f"Lỗi khi load dữ liệu từ Staging vào DW: {e}")
+        print(f"Lỗi khi load dữ liệu: {e}")
 
+# # Hàm thêm dữ liệu vào `date_dim`.
+# def AddValueDateDim(connection, row):
+#     try:
+#         query = """
+#         SELECT dest_table_dw
+#         FROM db_control.config_file
+#         WHERE index_id = %s;
+#         """
+#         configRow = ExecuteQuery(connection, query, (row['config_file_id'],), fetchOne=True)
+#         if not configRow:
+#             print(f"Không tìm thấy cấu hình cho config_file_id = {row['config_file_id']}")
+#             return
+
+#         connection.database = 'db_dw'
+#         updateQuery = f"""
+#         UPDATE {configRow['dest_table_dw']} t
+#         INNER JOIN date_dim d ON t.TimeGet = d.dates
+#         SET t.date_dim_id = d.id;
+#         """
+#         ExecuteQuery(connection, updateQuery)
+#         connection.commit()
+#         print(f"Transform thành công cho bảng: {configRow['dest_table_dw']}")
+#     except Error as e:
+#         print(f"Lỗi khi transform date: {e}")
 
 # Ghi lỗi vào file
 def WriteErrorLog(errorMessage, filePath):
     try:
         with open(filePath, "a", encoding="utf-8") as errorFile:
-            currentTime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            currentTime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             errorFile.write(f"[{currentTime}] {errorMessage}\n")
         print(f"Lỗi đã được ghi vào file: {filePath}")
     except Exception as e:
         print(f"Lỗi khi ghi lỗi vào file: {e}")
 
-
-import argparse
 
 def main(filePath, configId):
     retryCount = 0  # Đếm số lần thử
@@ -118,57 +162,53 @@ def main(filePath, configId):
             config = ReadDatabaseConfig(filePath)
             if not config:
                 raise ValueError("Cấu hình database không hợp lệ hoặc bị lỗi.")
-            
             # 2. Kết nối db_control
-            connection = mysql.connector.connect(
-                host=config['host'],
-                port=config['port'],
-                user=config['user'],
-                password=config['password'],
-                database=config['database']
-            )
-
-            if connection.is_connected():
-                # 3. Query db_control.log_file dòng với status = Extract_Complete , config_id
-                row = ExecuteQuery(connection, """
-                SELECT *
-                FROM db_control.log_file
-                WHERE status_log = 'Extract_Staging_Success' AND config_file_id = %s
-                LIMIT 1;
-                """, (configId,), fetchOne=True)
-
-                # 4. Kiểm tra kết quả truy vấn thành công ?
-                if row:
-                    # 5. cập nhật status = Load_Start
-                    UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Start")
-
-                    # 6. Load dữ liệu từ Staging vào Data Warehouse
-                    try:
-                        LoadDataIntoDW(connection, row)
-
-                        # 7. cập nhật status = Load_Complete
-                        UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Complete")
-                        break  # Thoát khỏi vòng lặp khi load thành công
-                    except Exception as e:
-                        # Ghi lỗi vào file D:\\error_LOAD_DW.txt
-                        WriteErrorLog(str(e), "D:\\error_LOAD_DW.txt")
-                        # 8. cập nhật status = Load_Failed
-                        UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Failed")
+            # 3. Kiểm tra kết nối cơ sở dữ liệu?
+            try:
+                connection = mysql.connector.connect(
+                    host=config['host'],
+                    port=config['port'],
+                    user=config['user'],
+                    password=config['password'],
+                    database=config['database']
+                )
+                if connection.is_connected():
+                     # 4. Query db_control.log_file dòng với status = Extract_Complete , config_id
+                    row = ExecuteQuery(connection, """
+                    SELECT *
+                    FROM log_file
+                    WHERE (status_log = 'Transform_Complete' OR status_log = 'Transform_Failed') AND config_file_id = %s
+                    LIMIT 1;
+                    """, (configId,), fetchOne=True)
+                    # 5. Kiểm tra kết quả truy vấn thành công ?
+                    if row:
+                        # 6. cập nhật status = Load_Start
+                        UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Start")
+                        # 7. Đọc dữ liệu từ file vào db_dw
+                        # 8. Kiểm tra load dữ liệu thành công ?
+                        try:
+                            LoadDataIntoDW(connection, row)
+                            # 9. cập nhật status = Load_Complete khi load vào dw thành công
+                            UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Complete")
+                            break
+                        except Exception as e:
+                            # Ghi lỗi vào file D:\\error_LOAD_STAGING.txt
+                            WriteErrorLog(str(e),"D:\\error_LOAD_STAGING.txt")
+                            # 8.1. cập nhật status = Load_Failed khi load vào dw thất bại
+                            UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Failed")
+                            connection.close()
+                            break
+                    else:
                         connection.close()
                         break
-                else:
-                    connection.close()
+            except Exception as e:
+                # Ghi lỗi vào file D:\\error_CONNECT_DB
+                WriteErrorLog(str(e), "D:\\error_CONNECT_DB.txt")
+                # 3.1. Kiểm tra số lần lặp có hơn 5 lần không ? 
+                retryCount += 1
+                if retryCount > 5:
                     break
-
-        except Exception as e:
-            # Ghi lỗi vào file D:\\error_CONNECT_DB.txt
-            WriteErrorLog(str(e), "D:\\error_CONNECT_DB.txt")
-            # 3.1. Kiểm tra số lần lặp có hơn 5 lần không ? 
-            retryCount += 1
-            if retryCount > 5:
-                break
-            print(f"Thử lại lần thứ {retryCount}...")
-
+                print(f"Thử lại lần thứ {retryCount}...")
         finally:
             if 'connection' in locals() and connection.is_connected():
                 connection.close()

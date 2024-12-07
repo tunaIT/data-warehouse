@@ -44,8 +44,6 @@ CREATE TABLE top_song_fact (
     time_get DATE NULL,                    -- Ngày lấy dữ liệu
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     date_dim_id INT NULL,                  -- Tham chiếu đến dim_date
-    date_expired DATE,                         -- Ngày bài hát rời bảng xếp hạng
-    source VARCHAR(255),                       -- Nguồn dữ liệu (Spotify, Zing...)
     FOREIGN KEY (song_key) REFERENCES dim_song(song_id) ON DELETE SET NULL,
     FOREIGN KEY (date_dim_id) REFERENCES date_dim(id) ON DELETE SET NULL
 );

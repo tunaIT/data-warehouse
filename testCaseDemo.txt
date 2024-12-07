@@ -1,4 +1,4 @@
 run getData : python GetData.py "D:\\myStudySpace\\hk7\\datawarehouse\\scriptETL\\config.xml" 1
 run ExtractToStaging : python ExtractToStaging.py "D:\\myStudySpace\\hk7\\datawarehouse\\scriptETL\\config.xml" 1
-
+run TransformData : python TransformData.py "D:\\myStudySpace\\hk7\\datawarehouse\\scriptETL\\config.xml" 1
 run ExtractToDW : python ExtractToDW.py "D:\\myStudySpace\\hk7\\datawarehouse\\scriptETL\\config.xml" 1
