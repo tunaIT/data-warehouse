@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+import mysql
 import mysql.connector
 from mysql.connector import Error
 import os

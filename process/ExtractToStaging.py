@@ -1,8 +1,7 @@
 import xml.etree.ElementTree as ET  # Thư viện xử lý file XML.
 import mysql.connector  # Thư viện để kết nối và thao tác với MySQL.
 from mysql.connector import Error  # Class xử lý lỗi của mysql.connector.
-import datetime  # Thư viện hỗ trợ làm việc với ngày giờ.
-
+from datetime import datetime  # Sửa đổi import để dùng trực tiếp datetime.now().
 
 # Hàm đọc cấu hình từ file XML.
 def ReadDatabaseConfig(filePath):
@@ -24,7 +23,6 @@ def ReadDatabaseConfig(filePath):
         print(f"Lỗi khi đọc file XML: {e}")
         return None
 
-
 # Hàm kết nối đến cơ sở dữ liệu.
 def ConnectToDatabase(configDb):
     try:
@@ -35,7 +33,6 @@ def ConnectToDatabase(configDb):
     except Error as e:
         print(f"Lỗi khi kết nối tới database: {e}")
         return None
-
 
 # Hàm thực thi câu truy vấn SQL.
 def ExecuteQuery(connection, query, params=None, fetchOne=False):
@@ -49,7 +46,6 @@ def ExecuteQuery(connection, query, params=None, fetchOne=False):
     finally:
         cursor.close()
 
-
 # Hàm cập nhật trạng thái và thời gian của một dòng.
 def UpdateStatus(connection, table, indexId, status):
     try:
@@ -58,13 +54,12 @@ def UpdateStatus(connection, table, indexId, status):
         SET status_log = %s, updated_at = %s
         WHERE index_id = %s;
         """
-        updatedAt = datetime.datetime.now()
+        updatedAt = datetime.now()
         ExecuteQuery(connection, query, (status, updatedAt, indexId))
         connection.commit()
         print(f"Cập nhật trạng thái '{status}' cho index_id = {indexId}.")
     except Error as e:
         print(f"Lỗi khi cập nhật trạng thái: {e}")
-
 
 # Hàm load dữ liệu từ file CSV.
 def LoadDataIntoStaging(connection, row):
@@ -101,7 +96,6 @@ def LoadDataIntoStaging(connection, row):
     except Error as e:
         print(f"Lỗi khi load dữ liệu: {e}")
 
-
 # Hàm thêm dữ liệu vào `date_dim`.
 def AddValueDateDim(connection, row):
     try:
@@ -136,6 +130,7 @@ def WriteErrorLog(errorMessage, filePath):
         print(f"Lỗi đã được ghi vào file: {filePath}")
     except Exception as e:
         print(f"Lỗi khi ghi lỗi vào file: {e}")
+
 import argparse
 
 def main(filePath, configId):

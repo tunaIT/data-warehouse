@@ -74,3 +74,29 @@ VALUES (
     'top_song_fact'
 );
 
+INSERT INTO log_file (
+    index_id, 
+    config_file_id, 
+    file_name, 
+    file_size, 
+    status_log, 
+    total_row_infile,
+    created_at,
+    updated_at
+) 
+VALUES (
+    1, 1, 'top100_04-12-2024.csv', 0, 'Extract_Complete', 100,  '2024-12-04 11:49:00', '2024-12-04 11:49:30'
+);
+INSERT INTO log_file (
+    index_id, 
+    config_file_id, 
+    file_name, 
+    file_size, 
+    status_log, 
+    total_row_infile,
+    created_at,
+    updated_at
+) 
+VALUES (
+    2, 2, 'top100_28-11-2024.csv', 0, 'Extract_Complete', 100,  '2024-28-11 11:49:00', '2024-11-28 11:49:30'
+);
