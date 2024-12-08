@@ -31,7 +31,7 @@ DROP TABLE IF EXISTS dim_song;
 CREATE TABLE IF NOT EXISTS dim_song (
     song_id INT PRIMARY KEY AUTO_INCREMENT,  -- Khóa chính
     song_name VARCHAR(255) NULL,         -- Tên bài hát
-    artist_name VARCHAR(255) NULL       -- Tên nghệ sĩ hoặc ban nhạc
+    Artist VARCHAR(255) NULL       -- Tên nghệ sĩ hoặc ban nhạc
 );
 
 -- Xóa bảng top_song_fact nếu đã tồn tại
@@ -48,4 +48,17 @@ CREATE TABLE top_song_fact (
     FOREIGN KEY (date_dim_id) REFERENCES date_dim(id) ON DELETE SET NULL
 );
 
+-- Xóa bảng aggregate_top_song nếu đã tồn tại
+DROP TABLE IF EXISTS aggregate_top_song;
 
+-- Tạo bảng aggregate_top_song (thống kê tổng hợp bài hát)
+CREATE TABLE aggregate_top_song (
+    id INT PRIMARY KEY AUTO_INCREMENT,        -- Khóa chính
+    song_key INT NOT NULL,                    -- Tham chiếu đến dim_song
+    first_appearance DATE NOT NULL,           -- Ngày xuất hiện đầu tiên
+    last_appearance DATE NOT NULL,            -- Ngày xuất hiện gần nhất
+    total_weeks_on_chart INT DEFAULT 0,       -- Tổng số tuần xuất hiện trong bảng xếp hạng
+    avg_rank FLOAT,                           -- Thứ hạng trung bình
+    highest_rank INT,                         -- Thứ hạng cao nhất
+    FOREIGN KEY (song_key) REFERENCES dim_song(song_id) ON DELETE CASCADE
+);
