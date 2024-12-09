@@ -6,6 +6,16 @@ import os
 import subprocess
 from datetime import datetime
 import sys  # Thêm import sys để xử lý đối số dòng lệnh
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+import pandas as pd
+import os
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import time
+from datetime import datetime
+import sys
 
 # Đọc cấu hình từ file XML
 def ReadDatabaseConfig(filePath):
@@ -31,20 +41,58 @@ def ReadDatabaseConfig(filePath):
 
 # Chạy script Python khác và lấy kết quả
 def ExecutePythonScript(scriptPath):
-    try:
-        result = subprocess.run(
-            ["python", scriptPath],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'  # Use utf-8 encoding to avoid unicode errors
-        )
-        print("Script executed successfully!")
-        return result
-    except subprocess.CalledProcessError as error:
-        print(f"Error while executing script: {error.stderr}")
-        WriteErrorLog(error.stderr)
-        return None
+    sys.stdout.reconfigure(encoding='utf-8')
+
+    # Cài đặt trình điều khiển Coc Coc
+    options = webdriver.ChromeOptions()
+    options.binary_location = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+
+    # Đường dẫn đến ChromeDriver
+    driver = webdriver.Chrome(service=Service("D:\\Download\\chromedriver-win64\\chromedriver.exe"), options=options)
+
+    # URL cần truy cập
+    url = 'https://zingmp3.vn/album/Top-100-Nhac-Rap-Viet-Nam-Hay-Nhat-HIEUTHUHAI-Rhyder-Bray-Double2T/ZWZB96AI.html'
+    driver.get(url)
+    time.sleep(15)  # Chờ trang load ban đầu
+
+    # Lấy thông tin bài hát
+    products = driver.find_elements(By.CSS_SELECTOR, 'div.card-info')
+    data = []
+    count = 1
+
+    for product in products:
+        try:
+            # Lấy tên bài hát
+            title_element = product.find_element(By.CSS_SELECTOR, 'h3.is-one-line.is-truncate.subtitle')
+            # Lấy nghệ sĩ
+            links = product.find_elements(By.CSS_SELECTOR, 'div.title-wrapper span.item-title span')
+            link_texts = [link.text for link in links]
+            name = title_element.text
+            current_time = datetime.now().strftime('%Y/%m/%d')
+
+            data.append([count, name, link_texts, current_time])
+            count += 1
+            
+        except Exception as e:
+            print(f"Error retrieving product information: {e}")
+            print(product.get_attribute('outerHTML'))  # Print HTML nếu có lỗi
+
+    # Tạo DataFrame
+    df = pd.DataFrame(data, columns=['Top', 'Song Name', 'Artist', 'Time Get'])
+    
+    # Đặt tên file
+    current_time = datetime.now().strftime('%Y-%m-%d')
+    filename = os.path.join(r'C:\ProgramData\MySQL\MySQL Server 8.0\Uploads', f'top100_{current_time}.csv')  # Đường dẫn đầy đủ
+    
+    # Lưu file CSV
+    df.to_csv(filename, index=False, encoding='utf-8-sig')
+    driver.quit()
+    
+    return True  # Trả về đường dẫn file CSV
 
 # Ghi log vào database
 def LogStatus(connection, configFileId, status):
@@ -151,7 +199,7 @@ while retryCount < retryLimit:
                 # 5. Lấy dữ liệu từ source zingmp3 
                 result = ExecutePythonScript(scriptPath)
                 # 6. Kiểm tra kết quả lấy dữ liệu thành công?
-                if  result.stdout:  # dữ liệu đầu ra có dl
+                if result:  # dữ liệu đầu ra có dl
                     # 7. Cập nhật log trong db_control.log_file
                     SetStatus(connection, configId, "Extract_Complete")
                     break  # Thành công -> thoát vòng lặp

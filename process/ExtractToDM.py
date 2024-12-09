@@ -63,10 +63,10 @@ def UpdateStatus(connection, table, indexId, status):
         print(f"Lỗi khi cập nhật trạng thái: {e}")
 
 # Hàm load dữ liệu từ file CSV.
-def LoadDataIntoDW(connection, row):
+def LoadDataIntoDM(connection, row):
     try:
         query = """
-        SELECT dest_table_staging, name_source
+        SELECT dest_table_dw
         FROM db_control.config_file
         WHERE index_id = %s;
         """
@@ -75,82 +75,61 @@ def LoadDataIntoDW(connection, row):
             print(f"Không tìm thấy cấu hình cho config_file_id = {row['config_file_id']}")
             return
         
-        sourceTable = configRow['dest_table_staging']
-        sourceName = configRow['name_source']
-        connection.database = 'db_staging'
+        sourceTable = configRow['dest_table_dw']
+        connection.database = 'db_dataMart'
         connection.database = 'db_dw'
 
-        #load dữ liệu từ staging qua data warehouse
-        # Chèn dữ liệu vào bảng dim_song
-        loadDataDimSongQuery = f"""
-        INSERT INTO dim_song (song_name, Artist)
-        SELECT DISTINCT t.SongName, t.Artist
-        FROM db_staging.{sourceTable} t
-        WHERE NOT EXISTS (
-            SELECT 1 FROM dim_song d
-            WHERE d.song_name = t.SongName AND d.Artist = t.Artist
-        );
-        """
-        ExecuteQuery(connection, loadDataDimSongQuery)
-        print(f"Dữ liệu đã được chèn vào bảng dim_song từ bảng {sourceTable}.")
-        
-        # Chèn dữ liệu vào bảng top_song_fact
-        loadDataTopSongFactQuery = f"""
-        INSERT INTO top_song_fact (song_key, top, time_get, date_dim_id)
-        SELECT
-            d.song_id,
-            t.Top,
-            t.TimeGet,
-            t.date_dim_id
-        FROM db_staging.{sourceTable} t
-        INNER JOIN dim_song d
-            ON d.song_name = t.SongName AND d.Artist = t.Artist
-        WHERE NOT EXISTS (
-            SELECT 1 FROM top_song_fact dw
-            WHERE dw.time_get = t.TimeGet AND dw.song_key = d.song_id 
-        );
-        """
-        ExecuteQuery(connection, loadDataTopSongFactQuery)
-        connection.commit()
-        print(f"Dữ liệu đã được load vào bảng top_song_fact từ bảng {sourceTable} .")
-        
-        # Chèn dữ liệu vào bảng aggregate_top_song
-        loadDataAggregateTopSongQuery = f"""
-        INSERT INTO aggregate_top_song (
-            song_name, 
-            Artist, 
-            first_appearance, 
-            last_appearance, 
-            total_weeks_on_chart, 
-            avg_rank, 
+        #load dữ liệu từ data warehouse qua data mart
+        # Load dữ liệu từ bảng (aggregate_top_song trong DW) vào bảng tạm aggregate_top_song trong DM
+        loadDataATSQuery = f"""
+        INSERT INTO db_dataMart.aggregate_top_song(
+            song_name,
+            Artist,
+            first_appearance,
+            last_appearance,
+            total_weeks_on_chart,
+            avg_rank,
             highest_rank,
             sourceName
-        )
-        SELECT
-            d.song_name,
-            d.Artist,
-            MIN(tsf.time_get) AS first_appearance,
-            MAX(tsf.time_get) AS last_appearance,
-            COUNT(DISTINCT tsf.time_get) AS total_weeks_on_chart,
-            AVG(tsf.top) AS avg_rank,
-            MIN(tsf.top) AS highest_rank,
-            '{sourceName}'
-        FROM db_dw.top_song_fact tsf
-        INNER JOIN dim_song d
-            ON tsf.song_key = d.song_id
-        GROUP BY d.song_name, d.Artist
-        ON DUPLICATE KEY UPDATE
-            first_appearance = VALUES(first_appearance),
-            last_appearance = VALUES(last_appearance),
-            total_weeks_on_chart = VALUES(total_weeks_on_chart),
-            avg_rank = VALUES(avg_rank),
-            highest_rank = VALUES(highest_rank),
-            sourceName = VALUES(sourceName);
+        )  
+        SELECT 
+            ats.song_name,
+            ats.Artist,
+            ats.first_appearance,
+            ats.last_appearance,
+            ats.total_weeks_on_chart,
+            ats.avg_rank,
+            ats.highest_rank,
+            ats.sourceName
+        FROM db_dw.{sourceTable} ats
         """
-        ExecuteQuery(connection, loadDataAggregateTopSongQuery)
+        ExecuteQuery(connection, loadDataATSQuery)
         connection.commit()
-        print("Dữ liệu đã được load vào bảng aggregate_top_song.")
-
+        print(f"Dữ liệu đã được load vào bảng aggregate_top_song từ bảng {sourceTable}.")
+        
+        # Kiểm tra bảng top_song có tồn tại không, nếu có thì đổi tên
+        checkTableQuery = """
+        SELECT COUNT(*)
+        FROM information_schema.tables 
+        WHERE table_schema = 'db_dataMart' AND table_name = 'top_song';
+        """
+        result = ExecuteQuery(connection, checkTableQuery, fetchOne=True)
+        if result[0] > 0:
+            renameOldBQuery = """
+            RENAME TABLE top_song TO top_song_b1;
+            """
+            ExecuteQuery(connection, renameOldBQuery)
+            connection.commit()
+            print("Bảng top_song đã được đổi tên thành top_song_b1.")
+        
+        # Đổi tên bảng aggregate_top_song thành top_song
+        renameTempBQuery = """
+        RENAME TABLE aggregate_top_song TO top_song;
+        """
+        ExecuteQuery(connection, renameTempBQuery)
+        connection.commit()
+        print("Bảng aggregate_top_song đã được đổi tên thành top_song.")
+        
     except Error as e:
         print(f"Lỗi khi load dữ liệu: {e}")
 
@@ -188,25 +167,25 @@ def main(filePath, configId):
                     row = ExecuteQuery(connection, """
                     SELECT *
                     FROM log_file
-                    WHERE (status_log = 'Transform_Complete' OR status_log = 'Transform_Failed') AND config_file_id = %s
+                    WHERE (status_log = 'Load_Complete' OR status_log = 'Load_Failed') AND config_file_id = %s
                     LIMIT 1;
                     """, (configId,), fetchOne=True)
                     # 5. Kiểm tra kết quả truy vấn thành công ?
                     if row:
                         # 6. cập nhật status = Load_Start
-                        UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Start")
-                        # 7. Đọc dữ liệu từ file vào db_dw
+                        UpdateStatus(connection, "db_control.log_file", row['index_id'], "Extract_DataMart_Start")
+                        # 7. Đọc dữ liệu từ file vào db_dataMart
                         # 8. Kiểm tra load dữ liệu thành công ?
                         try:
-                            LoadDataIntoDW(connection, row)
-                            # 9. cập nhật status = Load_Complete khi load vào dw thành công
-                            UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Complete")
+                            LoadDataIntoDM(connection, row)
+                            # 9. cập nhật status = Load_Complete khi load vào dataMart thành công
+                            UpdateStatus(connection, "db_control.log_file", row['index_id'], "Extract_DataMart_Success")
                             break
                         except Exception as e:
-                            # Ghi lỗi vào file D:\\error_LOAD_STAGING.txt
-                            WriteErrorLog(str(e),"D:\\error_LOAD_DW.txt")
-                            # 8.1. cập nhật status = Load_Failed khi load vào dw thất bại
-                            UpdateStatus(connection, "db_control.log_file", row['index_id'], "Load_Failed")
+                            # Ghi lỗi vào file D:\\error_LOAD_DM.txt
+                            WriteErrorLog(str(e),"D:\\error_LOAD_DM.txt")
+                            # 8.1. cập nhật status = Load_Failed khi load vào dataMart thất bại
+                            UpdateStatus(connection, "db_control.log_file", row['index_id'], "Extract_DataMart_Failed")
                             connection.close()
                             break
                     else:
